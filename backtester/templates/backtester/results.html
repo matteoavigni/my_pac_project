@@ -1,8 +1,12 @@
 {% extends 'backtester/base.html' %}
+{% load l10n %}
 
 {% block content %}
 <div class="results-header">
-    <a href="{% url 'calcolatore' %}" class="back-link">← Nuova Simulazione</a>
+    <a href="{% url 'calcolatore' %}" class="btn-back">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+        Nuova Simulazione
+    </a>
     <h1>Performance Portafoglio Totale</h1>
 </div>
 
@@ -10,17 +14,30 @@
 <div class="kpi-grid">
     <div class="kpi-card">
         <span class="label">Totale Investito</span>
-        <span class="value">€ {{ risultato.investito }}</span>
+        <!-- FIX: Usiamo il filtro |unlocalize invece del tag block. Molto più robusto. -->
+        <span class="value fmt-currency" data-val="{{ risultato.investito|default:0|unlocalize }}">€ ...</span>
     </div>
     <div class="kpi-card success">
         <span class="label">Valore Finale Lordo</span>
-        <span class="value">€ {{ risultato.valore_finale }}</span>
+        <span class="value fmt-currency" data-val="{{ risultato.valore_finale|default:0|unlocalize }}">€ ...</span>
         <span class="sub-value">+{{ risultato.profitto_pct }}%</span>
     </div>
     <div class="kpi-card info">
         <span class="label">Netto (Post Tasse)</span>
-        <span class="value">€ {{ risultato.valore_netto }}</span>
-        <span class="sub-value">Tasse: € {{ risultato.tasse }}</span>
+        <span class="value fmt-currency" data-val="{{ risultato.valore_netto|default:0|unlocalize }}">€ ...</span>
+
+        <span class="sub-value" style="display: flex; align-items: center; gap: 4px;">
+            Tasse: <span class="fmt-currency" data-val="{{ risultato.tasse|default:0|unlocalize }}">€ ...</span>
+
+            <span class="custom-tooltip">
+                <span style="font-size: 0.8em; opacity: 0.7; cursor: help;">ℹ️</span>
+                <span class="tooltip-text">
+                    Calcolata al 26% sulle plusvalenze realizzate (regime amministrato/dichiarativo standard).
+                    Non include imposta di bollo (0.2%).
+                </span>
+            </span>
+        </span>
+
     </div>
     <div class="kpi-card danger">
         <span class="label">Max Drawdown</span>
@@ -29,8 +46,11 @@
 </div>
 
 <!-- GRAFICO -->
-<div class="card chart-container">
-    <canvas id="pacChart"></canvas>
+<!-- FIX: Separato il contenitore visuale (card) dal contenitore dimensionale (chart-wrapper) -->
+<div class="card card-chart">
+    <div class="chart-wrapper">
+        <canvas id="pacChart"></canvas>
+    </div>
 </div>
 
 <!-- TABELLA DETTAGLIO -->
@@ -41,6 +61,7 @@
             <thead>
                 <tr style="text-align: left; border-bottom: 2px solid #e2e8f0;">
                     <th style="padding: 10px;">Ticker</th>
+                    <th style="padding: 10px;">Valuta Orig.</th>
                     <th style="padding: 10px;">Investito</th>
                     <th style="padding: 10px;">Valore Finale</th>
                     <th style="padding: 10px;">Profitto Netto</th>
@@ -50,10 +71,11 @@
                 {% for item in risultato.dettagli_singoli %}
                 <tr style="border-bottom: 1px solid #f1f5f9;">
                     <td style="padding: 12px; font-weight: 600;">{{ item.ticker }}</td>
-                    <td style="padding: 12px;">€ {{ item.investito|floatformat:2 }}</td>
-                    <td style="padding: 12px;">€ {{ item.valore_finale|floatformat:2 }}</td>
-                    <td style="padding: 12px; color: {% if item.profitto_netto > 0 %}#10b981{% else %}#ef4444{% endif %};">
-                        € {{ item.profitto_netto|floatformat:2 }}
+                    <td style="padding: 12px; color: #64748b; font-size: 0.9em;">{{ item.currency }}</td>
+                    <td style="padding: 12px;" class="fmt-currency" data-val="{{ item.investito|default:0|unlocalize }}"></td>
+                    <td style="padding: 12px;" class="fmt-currency" data-val="{{ item.valore_finale|default:0|unlocalize }}"></td>
+                    <td style="padding: 12px; color: {% if item.profitto_netto > 0 %}#10b981{% else %}#ef4444{% endif %};"
+                        class="fmt-currency" data-val="{{ item.profitto_netto|default:0|unlocalize }}">
                     </td>
                 </tr>
                 {% endfor %}
@@ -62,54 +84,219 @@
     </div>
 </div>
 
-<!-- SCRIPT GRAFICO -->
+<!-- SCRIPT LOGICA (Grafico + Formattazione Numeri) -->
 <script>
-    const rawData = JSON.parse('{{ grafico_json|safe }}');
+    document.addEventListener("DOMContentLoaded", function() {
 
-    const labels = rawData.map(d => d.date);
-    const investito = rawData.map(d => d.investito);
-    const valore = rawData.map(d => d.valore);
+        // --- 1. FORMATTAZIONE NUMERI MANUALE (ROBUSTA) ---
+        // Forza i punti delle migliaia anche per numeri a 4 cifre (es. 8.400,00)
+        function formatEuro(number) {
+            if (isNaN(number)) return "€ 0,00";
 
-    const ctx = document.getElementById('pacChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Valore Portafoglio',
-                    data: valore,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                },
-                {
-                    label: 'Capitale Versato',
-                    data: investito,
-                    borderColor: '#94a3b8',
-                    borderDash: [5, 5],
-                    tension: 0.1,
-                    pointRadius: 0
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            interaction: {
-                mode: 'index',
-                intersect: false,
+            // Fissa a 2 decimali (stringa es. "8400.50")
+            let parts = Number(number).toFixed(2).split('.');
+
+            // Aggiungi punti alle migliaia nella parte intera usando RegEx
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+            // Unisci con la virgola e aggiungi simbolo
+            return parts.join(',') + ' €';
+        }
+
+        const currencyElements = document.querySelectorAll('.fmt-currency');
+
+        currencyElements.forEach(el => {
+            let rawData = el.getAttribute('data-val');
+
+            if (rawData) {
+                rawData = rawData.replace(',', '.');
+            }
+            const rawVal = parseFloat(rawData);
+
+            // Usa la funzione custom invece di Intl
+            el.textContent = formatEuro(rawVal);
+        });
+
+        // --- 2. GRAFICO ---
+        const rawData = {{ grafico_json|safe }};
+
+        const labels = rawData.map(d => d.date);
+        const investito = rawData.map(d => d.investito);
+        const valore = rawData.map(d => d.valore);
+
+        const ctx = document.getElementById('pacChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Valore Portafoglio',
+                        data: valore,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        hitRadius: 10
+                    },
+                    {
+                        label: 'Capitale Versato',
+                        data: investito,
+                        borderColor: '#94a3b8',
+                        borderDash: [5, 5],
+                        tension: 0.1,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        hitRadius: 10
+                    }
+                ]
             },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': € ' + context.parsed.y.toLocaleString('it-IT');
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, // Necessario per il controllo CSS
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    // Usa la funzione custom anche qui
+                                    label += formatEuro(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    },
+                    legend: {
+                        labels: {
+                            usePointStyle: true,
+                            boxWidth: 10
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { maxTicksLimit: 8, maxRotation: 0 }
+                    },
+                    y: {
+                        grid: { borderDash: [2, 4], color: '#f1f5f9' },
+                        ticks: {
+                            // Formattazione asse Y semplificata (10k, 20k)
+                            callback: function(value) {
+                                return '€' + (value / 1000).toFixed(0) + 'k';
+                            }
                         }
                     }
                 }
             }
-        }
+        });
     });
 </script>
+
+<style>
+    /* CSS STRUTTURALE PER GRAFICO RESPONSIVE */
+
+    /* Il wrapper interno gestisce le dimensioni pure del canvas */
+    .chart-wrapper {
+        position: relative;
+        width: 100%;
+        height: 450px; /* Altezza default Desktop */
+        overflow: hidden; /* Sicurezza extra */
+    }
+
+    /* Su mobile: altezza fissa ridotta e padding ottimizzato */
+    @media (max-width: 768px) {
+        .card-chart {
+            padding: 10px !important; /* Meno padding = più spazio per il grafico */
+        }
+
+        .chart-wrapper {
+            height: 300px; /* Altezza fissa mobile sicura */
+            /* Rimosso aspect-ratio che poteva causare overflow */
+        }
+    }
+
+    /* Bottone Indietro Custom */
+    .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background-color: #fff;
+        color: #64748b;
+        padding: 8px 16px;
+        border-radius: 99px;
+        border: 1px solid #e2e8f0;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .btn-back:hover {
+        background-color: #f8fafc;
+        border-color: #cbd5e1;
+        color: #334155;
+        transform: translateX(-2px);
+    }
+
+    /* Tooltip Custom */
+    .custom-tooltip {
+        position: relative;
+        display: inline-block;
+    }
+
+    .custom-tooltip .tooltip-text {
+        visibility: hidden;
+        width: 240px;
+        background-color: #1e293b;
+        color: #fff;
+        text-align: center;
+        border-radius: 6px;
+        padding: 8px 12px;
+        position: absolute;
+        z-index: 10;
+        bottom: 130%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.2s;
+
+        font-size: 0.75rem;
+        line-height: 1.4;
+        font-weight: normal;
+        box-shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.2);
+        pointer-events: none;
+    }
+
+    .custom-tooltip .tooltip-text::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #1e293b transparent transparent transparent;
+    }
+
+    .custom-tooltip:hover .tooltip-text {
+        visibility: visible;
+        opacity: 1;
+        bottom: 140%;
+    }
+</style>
 {% endblock %}

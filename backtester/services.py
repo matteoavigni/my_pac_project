@@ -3,57 +3,92 @@ import pandas as pd
 import yfinance as yf
 
 
+def get_clean_series(df, col_name='Adj Close'):
+    """Helper per estrarre una serie pulita da yfinance, gestendo MultiIndex e colonne."""
+    if df.empty:
+        return None
+
+    series = None
+    # Caso MultiIndex
+    if isinstance(df.columns, pd.MultiIndex):
+        if col_name in df.columns.get_level_values(0):
+            series = df[col_name]
+        elif 'Close' in df.columns.get_level_values(0):
+            series = df['Close']
+    # Caso Flat Index
+    else:
+        if col_name in df.columns:
+            series = df[col_name]
+        elif 'Close' in df.columns:
+            series = df['Close']
+
+    # Fallback brutale
+    if series is None:
+        series = df.iloc[:, 0]
+
+    # Se dopo l'estrazione è ancora un DataFrame (es. ticker duplicati), prendiamo la prima colonna
+    if isinstance(series, pd.DataFrame):
+        series = series.iloc[:, 0]
+
+    return series
+
+
 def calcola_singolo_pac(dati_input):
-    """Calcola il PAC per un singolo ETF e restituisce un DataFrame con la serie storica."""
+    """Calcola il PAC per un singolo ETF convertendo tutto in EURO."""
     ticker = dati_input['ticker']
     start_date = dati_input['data_inizio']
     rata = dati_input['importo_periodico']
     iniziale = dati_input.get('importo_iniziale', 0)
     freq = int(dati_input['frequenza'])
 
-    # 1. Download Dati
+    # 1. Identifica Valuta
+    currency = 'EUR'
     try:
-        # FIX: auto_adjust=False per ripristinare il comportamento classico
+        # fast_info è rapido e non conta come chiamata API pesante
+        ticker_obj = yf.Ticker(ticker)
+        currency = ticker_obj.fast_info.get('currency', 'EUR')
+    except Exception:
+        pass  # Se fallisce assumiamo EUR
+
+    # 2. Download Dati ETF
+    try:
         df = yf.download(ticker, start=start_date, progress=False, auto_adjust=False)
-        if df.empty:
-            return None
+        price_series = get_clean_series(df)
+        if price_series is None: return None
 
-        # Gestione robusta delle colonne
-        price_series = None
+        # 3. Conversione Valuta (Se necessaria)
+        if currency != 'EUR':
+            # Costruiamo il ticker del cambio, es: 'USDEUR=X'
+            fx_ticker = f"{currency}EUR=X"
 
-        if isinstance(df.columns, pd.MultiIndex):
-            if 'Adj Close' in df.columns.get_level_values(0):
-                price_series = df['Adj Close']
-            elif 'Close' in df.columns.get_level_values(0):
-                price_series = df['Close']
-        else:
-            if 'Adj Close' in df.columns:
-                price_series = df['Adj Close']
-            elif 'Close' in df.columns:
-                price_series = df['Close']
+            # Scarichiamo storico cambio
+            df_fx = yf.download(fx_ticker, start=start_date, progress=False, auto_adjust=False)
+            fx_series = get_clean_series(df_fx)
 
-        if price_series is None:
-            price_series = df.iloc[:, 0]
+            if fx_series is not None:
+                # Allineiamo il cambio alle date dell'ETF
+                # Usiamo 'ffill' perché il forex non chiude come la borsa azionaria,
+                # ma vogliamo assicurarci di avere un tasso per ogni giorno di trading dell'ETF.
+                fx_series = fx_series.reindex(price_series.index, method='ffill').fillna(method='bfill')
 
+                # Convertiamo il prezzo in EURO
+                price_series = price_series * fx_series
+
+        # Usiamo la serie convertita come base
         df = price_series
 
-        if isinstance(df, pd.DataFrame):
-            df = df.iloc[:, 0]
-
     except Exception as e:
-        print(f"Errore download {ticker}: {e}")
+        print(f"Errore calcolo {ticker}: {e}")
         return None
 
-    # 2. Date di acquisto
+    # 4. Date di acquisto
     df_mensile = df.resample('MS').first()
     date_acquisto = df_mensile.iloc[::freq]
 
-    # 3. Simulazione
+    # 5. Simulazione
     quote_totali = 0
     investito_totale = 0
 
-    # DataFrame per tracciare l'evoluzione giornaliera
-    # Inizializziamo con dtype float per stabilità
     serie_storica = pd.DataFrame(index=df.index, columns=['investito', 'valore'], dtype=float)
 
     # Acquisto Iniziale
@@ -86,6 +121,7 @@ def calcola_singolo_pac(dati_input):
 
     return {
         'ticker': ticker,
+        'currency': currency,  # Info utile per debug
         'serie_storica': serie_storica,
         'investito': serie_storica.iloc[-1]['investito'],
         'valore_finale': valore_finale,
@@ -95,10 +131,7 @@ def calcola_singolo_pac(dati_input):
 
 
 def calcola_portafoglio_pac(lista_input):
-    """
-    Riceve una LISTA di dizionari input.
-    Aggrega le serie storiche e restituisce il totale.
-    """
+    """Aggrega le serie storiche convertite in EURO e restituisce il totale."""
     risultati_singoli = []
     serie_aggregate = []
 
@@ -113,19 +146,13 @@ def calcola_portafoglio_pac(lista_input):
 
     # --- AGGREGAZIONE ---
     df_totale = pd.concat(serie_aggregate, axis=1)
-
-    # Forward Fill sul totale aggregato
     df_totale = df_totale.ffill().fillna(0)
-
-    # FIX CRASH SINGOLO ETF:
-    # Se c'è un solo ETF, df_totale['investito'] è una Series (non ha axis=1).
-    # Se ci sono più ETF, è un DataFrame.
 
     subset_investito = df_totale['investito']
     if isinstance(subset_investito, pd.DataFrame):
         df_investito = subset_investito.sum(axis=1)
     else:
-        df_investito = subset_investito  # È già la serie corretta
+        df_investito = subset_investito
 
     subset_valore = df_totale['valore']
     if isinstance(subset_valore, pd.DataFrame):
@@ -135,11 +162,10 @@ def calcola_portafoglio_pac(lista_input):
 
     # Calcolo Max Drawdown
     rolling_max = df_valore.cummax()
-    # Evitiamo divisione per zero se il valore è 0 all'inizio
     with np.errstate(divide='ignore', invalid='ignore'):
         drawdown = (df_valore - rolling_max) / rolling_max
 
-    drawdown = drawdown.fillna(0)  # Fix per NaN iniziali
+    drawdown = drawdown.fillna(0)
     max_dd = drawdown.min() * 100
 
     storico_grafico = []
