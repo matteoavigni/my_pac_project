@@ -1,0 +1,115 @@
+{% extends 'backtester/base.html' %}
+
+{% block content %}
+<div class="results-header">
+    <a href="{% url 'calcolatore' %}" class="back-link">← Nuova Simulazione</a>
+    <h1>Performance Portafoglio Totale</h1>
+</div>
+
+<!-- KPI CARDS TOTALE -->
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <span class="label">Totale Investito</span>
+        <span class="value">€ {{ risultato.investito }}</span>
+    </div>
+    <div class="kpi-card success">
+        <span class="label">Valore Finale Lordo</span>
+        <span class="value">€ {{ risultato.valore_finale }}</span>
+        <span class="sub-value">+{{ risultato.profitto_pct }}%</span>
+    </div>
+    <div class="kpi-card info">
+        <span class="label">Netto (Post Tasse)</span>
+        <span class="value">€ {{ risultato.valore_netto }}</span>
+        <span class="sub-value">Tasse: € {{ risultato.tasse }}</span>
+    </div>
+    <div class="kpi-card danger">
+        <span class="label">Max Drawdown</span>
+        <span class="value text-red">{{ risultato.max_drawdown }}%</span>
+    </div>
+</div>
+
+<!-- GRAFICO -->
+<div class="card chart-container">
+    <canvas id="pacChart"></canvas>
+</div>
+
+<!-- TABELLA DETTAGLIO -->
+<div class="card" style="margin-top: 2rem;">
+    <h3>Dettaglio per ETF</h3>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+            <thead>
+                <tr style="text-align: left; border-bottom: 2px solid #e2e8f0;">
+                    <th style="padding: 10px;">Ticker</th>
+                    <th style="padding: 10px;">Investito</th>
+                    <th style="padding: 10px;">Valore Finale</th>
+                    <th style="padding: 10px;">Profitto Netto</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in risultato.dettagli_singoli %}
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 12px; font-weight: 600;">{{ item.ticker }}</td>
+                    <td style="padding: 12px;">€ {{ item.investito|floatformat:2 }}</td>
+                    <td style="padding: 12px;">€ {{ item.valore_finale|floatformat:2 }}</td>
+                    <td style="padding: 12px; color: {% if item.profitto_netto > 0 %}#10b981{% else %}#ef4444{% endif %};">
+                        € {{ item.profitto_netto|floatformat:2 }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- SCRIPT GRAFICO -->
+<script>
+    const rawData = JSON.parse('{{ grafico_json|safe }}');
+
+    const labels = rawData.map(d => d.date);
+    const investito = rawData.map(d => d.investito);
+    const valore = rawData.map(d => d.valore);
+
+    const ctx = document.getElementById('pacChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Valore Portafoglio',
+                    data: valore,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Capitale Versato',
+                    data: investito,
+                    borderColor: '#94a3b8',
+                    borderDash: [5, 5],
+                    tension: 0.1,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': € ' + context.parsed.y.toLocaleString('it-IT');
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

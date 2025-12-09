@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00F5A0"/>
+      <stop offset="100%" stop-color="#00D9F5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Lettere M e A -->
+  <path d="M15 80 L35 25 L50 80 Z M55 80 L70 25 L85 80"
+        stroke="url(#grad)" stroke-width="5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,32 @@
+{% extends 'backtester/base.html' %}
+
+{% block content %}
+<div class="hero">
+    <h1>Scopri quanto avresti guadagnato.</h1>
+    <p class="subtitle">
+        Simula un Piano di Accumulo (PAC) su ETF reali utilizzando dati storici.
+        Calcola rendimenti, impatto fiscale e massimo drawdown in pochi click.
+    </p>
+    
+    <div class="actions">
+        <a href="{% url 'calcolatore' %}" class="btn btn-primary btn-lg">
+            Inizia Simulazione 🚀
+        </a>
+    </div>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <h3>📊 Dati Reali</h3>
+            <p>Utilizza i prezzi storici di Yahoo Finance per massima precisione.</p>
+        </div>
+        <div class="feature-card">
+            <h3>🇮🇹 Tassazione</h3>
+            <p>Calcolo automatico del 26% sulle plusvalenze realizzate.</p>
+        </div>
+        <div class="feature-card">
+            <h3>📉 Analisi Rischio</h3>
+            <p>Visualizza il "drawdown" per capire la tenuta psicologica.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

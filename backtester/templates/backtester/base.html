@@ -1,0 +1,38 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PAC Backtester</title>
+
+    <!-- FAVICON: Carica il tuo file SVG dai file statici -->
+    <link rel="icon" type="image/svg+xml" href="{% static 'backtester/favicon.svg' %}">
+
+    <!-- Carichiamo il CSS -->
+    <link rel="stylesheet" href="{% static 'backtester/style.css' %}">
+    <!-- Chart.js per i grafici -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <!-- Anche qui puoi mettere il tuo logo se vuoi -->
+            <a href="{% url 'home' %}" class="logo">
+                <img src="{% static 'backtester/favicon.svg' %}" width="24" height="24" style="vertical-align: middle; margin-right: 8px;">
+                PAC Simulator
+            </a>
+        </div>
+    </nav>
+
+    <main class="container fade-in">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>Progetto Demo Django - Performance storiche simulate</p>
+    </footer>
+</body>
+</html>
