@@ -10,50 +10,48 @@
     <h1>Performance Portafoglio Totale</h1>
 </div>
 
-<!-- KPI CARDS TOTALE -->
+<!-- KPI CARDS GRID -->
 <div class="kpi-grid">
+    <!-- 1. CAPITALE INVESTITO -->
     <div class="kpi-card">
         <span class="label">Totale Investito</span>
-        <!-- FIX: Usiamo il filtro |unlocalize invece del tag block. Molto più robusto. -->
         <span class="value fmt-currency" data-val="{{ risultato.investito|default:0|unlocalize }}">€ ...</span>
     </div>
-    <div class="kpi-card success">
-        <span class="label">Valore Finale Lordo</span>
-        <span class="value fmt-currency" data-val="{{ risultato.valore_finale|default:0|unlocalize }}">€ ...</span>
-        <span class="sub-value">+{{ risultato.profitto_pct }}%</span>
-    </div>
-    <div class="kpi-card info">
-        <span class="label">Netto (Post Tasse)</span>
-        <span class="value fmt-currency" data-val="{{ risultato.valore_netto|default:0|unlocalize }}">€ ...</span>
 
-        <span class="sub-value" style="display: flex; align-items: center; gap: 4px;">
-            Tasse: <span class="fmt-currency" data-val="{{ risultato.tasse|default:0|unlocalize }}">€ ...</span>
-
-            <span class="custom-tooltip">
-                <span style="font-size: 0.8em; opacity: 0.7; cursor: help;">ℹ️</span>
-                <span class="tooltip-text">
-                    Calcolata al 26% sulle plusvalenze realizzate (regime amministrato/dichiarativo standard).
-                    Non include imposta di bollo (0.2%).
-                </span>
-            </span>
+    <!-- 2. DIVIDENDI (Cash Flow) -->
+    <div class="kpi-card" style="border-left: 4px solid #8b5cf6;">
+        <span class="label">Dividendi Incassati (Netto)</span>
+        <span class="value fmt-currency" data-val="{{ risultato.dividendi_netti|default:0|unlocalize }}" style="color: #7c3aed;">€ ...</span>
+        <span class="sub-value">
+            Lordo: <span class="fmt-currency" data-val="{{ risultato.dividendi_lordi|default:0|unlocalize }}"></span>
         </span>
-
     </div>
-    <div class="kpi-card danger">
-        <span class="label">Max Drawdown</span>
-        <span class="value text-red">{{ risultato.max_drawdown }}%</span>
+
+    <!-- 3. CAPITAL GAIN (Apprezzamento Quote) -->
+    <div class="kpi-card success">
+        <span class="label">Profitto da Capitale (Netto)</span>
+        <span class="value fmt-currency" data-val="{{ risultato.plusvalenza_netta|default:0|unlocalize }}">€ ...</span>
+        <span class="sub-value">
+            Lordo: <span class="fmt-currency" data-val="{{ risultato.plusvalenza_lorda|default:0|unlocalize }}"></span>
+        </span>
+    </div>
+
+    <!-- 4. TOTALE NETTO (Exit Value) -->
+    <div class="kpi-card info">
+        <span class="label">Valore Finale (Tutto Incluso)</span>
+        <span class="value fmt-currency" data-val="{{ risultato.valore_netto|default:0|unlocalize }}">€ ...</span>
+        <span class="sub-value">ROI Netto: +{{ risultato.profitto_pct }}%</span>
     </div>
 </div>
 
 <!-- GRAFICO -->
-<!-- FIX: Separato il contenitore visuale (card) dal contenitore dimensionale (chart-wrapper) -->
 <div class="card card-chart">
     <div class="chart-wrapper">
         <canvas id="pacChart"></canvas>
     </div>
 </div>
 
-<!-- TABELLA DETTAGLIO -->
+<!-- TABELLA DETTAGLIO ETF -->
 <div class="card" style="margin-top: 2rem;">
     <h3>Dettaglio per ETF</h3>
     <div style="overflow-x: auto;">
@@ -61,20 +59,23 @@
             <thead>
                 <tr style="text-align: left; border-bottom: 2px solid #e2e8f0;">
                     <th style="padding: 10px;">Ticker</th>
-                    <th style="padding: 10px;">Valuta Orig.</th>
                     <th style="padding: 10px;">Investito</th>
-                    <th style="padding: 10px;">Valore Finale</th>
-                    <th style="padding: 10px;">Profitto Netto</th>
+                    <th style="padding: 10px;">Dividendi Netti</th>
+                    <th style="padding: 10px;">Capital Gain Netto</th>
+                    <th style="padding: 10px;">Profitto Totale</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in risultato.dettagli_singoli %}
                 <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 12px; font-weight: 600;">{{ item.ticker }}</td>
-                    <td style="padding: 12px; color: #64748b; font-size: 0.9em;">{{ item.currency }}</td>
+                    <td style="padding: 12px; font-weight: 600;">
+                        {{ item.ticker }}
+                        <span style="display:block; font-size: 0.75rem; color: #94a3b8; font-weight:normal;">{{ item.currency }}</span>
+                    </td>
                     <td style="padding: 12px;" class="fmt-currency" data-val="{{ item.investito|default:0|unlocalize }}"></td>
-                    <td style="padding: 12px;" class="fmt-currency" data-val="{{ item.valore_finale|default:0|unlocalize }}"></td>
-                    <td style="padding: 12px; color: {% if item.profitto_netto > 0 %}#10b981{% else %}#ef4444{% endif %};"
+                    <td style="padding: 12px; color: #7c3aed;" class="fmt-currency" data-val="{{ item.dividendi_netti|default:0|unlocalize }}"></td>
+                    <td style="padding: 12px; color: #10b981;" class="fmt-currency" data-val="{{ item.plusvalenza_netta|default:0|unlocalize }}"></td>
+                    <td style="padding: 12px; font-weight: 600; color: {% if item.profitto_netto > 0 %}#10b981{% else %}#ef4444{% endif %};"
                         class="fmt-currency" data-val="{{ item.profitto_netto|default:0|unlocalize }}">
                     </td>
                 </tr>
@@ -84,40 +85,63 @@
     </div>
 </div>
 
-<!-- SCRIPT LOGICA (Grafico + Formattazione Numeri) -->
+<!-- NUOVA SEZIONE: TABELLA TOP 5 DRAWDOWN -->
+<div class="card" style="margin-top: 2rem; border-left: 4px solid #ef4444;">
+    <h3>Analisi Rischio: Top 5 Drawdown</h3>
+    <p style="font-size: 0.9rem; color: #64748b; margin-bottom: 1rem;">I momenti peggiori vissuti dal portafoglio (dal picco al fondo).</p>
+
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="text-align: left; border-bottom: 2px solid #e2e8f0;">
+                    <th style="padding: 10px;">Periodo (Picco - Fondo)</th>
+                    <th style="padding: 10px;">Perdita %</th>
+                    <th style="padding: 10px;">Perdita Monetaria</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dd in risultato.top_drawdowns %}
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 12px; font-weight: 600; color: #334155;">{{ dd.period }}</td>
+                    <td style="padding: 12px; color: #ef4444; font-weight: 700;">{{ dd.pct|floatformat:2 }}%</td>
+                    <td style="padding: 12px; color: #ef4444;" class="fmt-currency" data-val="{{ dd.euro|default:0|unlocalize }}"></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" style="padding: 20px; text-align: center; color: #94a3b8;">
+                        Nessun drawdown significativo rilevato.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- SCRIPT LOGICA (Invariato) -->
 <script>
     document.addEventListener("DOMContentLoaded", function() {
 
-        // --- 1. FORMATTAZIONE NUMERI MANUALE (ROBUSTA) ---
-        // Forza i punti delle migliaia anche per numeri a 4 cifre (es. 8.400,00)
         function formatEuro(number) {
             if (isNaN(number)) return "€ 0,00";
-
-            // Fissa a 2 decimali (stringa es. "8400.50")
+            let isNegative = number < 0;
+            number = Math.abs(number);
             let parts = Number(number).toFixed(2).split('.');
-
-            // Aggiungi punti alle migliaia nella parte intera usando RegEx
             parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-
-            // Unisci con la virgola e aggiungi simbolo
-            return parts.join(',') + ' €';
+            return (isNegative ? '-' : '') + parts.join(',') + ' €';
         }
 
         const currencyElements = document.querySelectorAll('.fmt-currency');
 
         currencyElements.forEach(el => {
             let rawData = el.getAttribute('data-val');
-
             if (rawData) {
                 rawData = rawData.replace(',', '.');
             }
             const rawVal = parseFloat(rawData);
-
-            // Usa la funzione custom invece di Intl
             el.textContent = formatEuro(rawVal);
         });
 
-        // --- 2. GRAFICO ---
         const rawData = {{ grafico_json|safe }};
 
         const labels = rawData.map(d => d.date);
@@ -131,7 +155,7 @@
                 labels: labels,
                 datasets: [
                     {
-                        label: 'Valore Portafoglio',
+                        label: 'Valore Totale (Asset + Cash)',
                         data: valore,
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -157,7 +181,7 @@
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false, // Necessario per il controllo CSS
+                maintainAspectRatio: false,
                 interaction: {
                     mode: 'index',
                     intersect: false,
@@ -171,7 +195,6 @@
                                     label += ': ';
                                 }
                                 if (context.parsed.y !== null) {
-                                    // Usa la funzione custom anche qui
                                     label += formatEuro(context.parsed.y);
                                 }
                                 return label;
@@ -193,7 +216,6 @@
                     y: {
                         grid: { borderDash: [2, 4], color: '#f1f5f9' },
                         ticks: {
-                            // Formattazione asse Y semplificata (10k, 20k)
                             callback: function(value) {
                                 return '€' + (value / 1000).toFixed(0) + 'k';
                             }
@@ -206,29 +228,18 @@
 </script>
 
 <style>
-    /* CSS STRUTTURALE PER GRAFICO RESPONSIVE */
-
-    /* Il wrapper interno gestisce le dimensioni pure del canvas */
     .chart-wrapper {
         position: relative;
         width: 100%;
-        height: 450px; /* Altezza default Desktop */
-        overflow: hidden; /* Sicurezza extra */
+        height: 450px;
+        overflow: hidden;
     }
 
-    /* Su mobile: altezza fissa ridotta e padding ottimizzato */
     @media (max-width: 768px) {
-        .card-chart {
-            padding: 10px !important; /* Meno padding = più spazio per il grafico */
-        }
-
-        .chart-wrapper {
-            height: 300px; /* Altezza fissa mobile sicura */
-            /* Rimosso aspect-ratio che poteva causare overflow */
-        }
+        .card-chart { padding: 10px !important; }
+        .chart-wrapper { height: 300px; }
     }
 
-    /* Bottone Indietro Custom */
     .btn-back {
         display: inline-flex;
         align-items: center;
@@ -253,12 +264,10 @@
         transform: translateX(-2px);
     }
 
-    /* Tooltip Custom */
     .custom-tooltip {
         position: relative;
         display: inline-block;
     }
-
     .custom-tooltip .tooltip-text {
         visibility: hidden;
         width: 240px;
@@ -274,14 +283,12 @@
         transform: translateX(-50%);
         opacity: 0;
         transition: opacity 0.2s;
-
         font-size: 0.75rem;
         line-height: 1.4;
         font-weight: normal;
         box-shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.2);
         pointer-events: none;
     }
-
     .custom-tooltip .tooltip-text::after {
         content: "";
         position: absolute;
@@ -292,7 +299,6 @@
         border-style: solid;
         border-color: #1e293b transparent transparent transparent;
     }
-
     .custom-tooltip:hover .tooltip-text {
         visibility: visible;
         opacity: 1;

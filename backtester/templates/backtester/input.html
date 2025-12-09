@@ -16,18 +16,22 @@
             <div class="pac-row-card fade-in">
                 <div class="row-header">
                     <span class="row-title">ETF #{{ forloop.counter }}</span>
+                    <!-- TASTO RIMUOVI -->
+                    <button type="button" class="btn-delete" title="Rimuovi ETF">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
                 </div>
 
                 <div class="form-grid-compact">
                     <div class="form-group relative-container">
                         <label>Ticker</label>
                         {{ form.ticker }}
-                        <!-- Elemento per mostrare il feedback live -->
                         <div class="ticker-feedback"></div>
                     </div>
                     <div class="form-group">
                         <label>Data Inizio</label>
                         {{ form.data_inizio }}
+                        <div class="date-feedback" style="font-size: 0.75rem; color: #64748b; margin-top: 4px; min-height: 1.2em;"></div>
                     </div>
                     <div class="form-group">
                         <label>Investimento Iniziale</label>
@@ -50,8 +54,8 @@
             <button type="button" id="add-btn" class="btn btn-outline">
                 + Aggiungi un altro ETF
             </button>
-            <button type="submit" class="btn btn-primary">
-                Calcola Portafoglio Totale ⚡
+            <button type="submit" id="submit-btn" class="btn btn-primary" disabled>
+                Calcola performance
             </button>
         </div>
     </form>
@@ -62,6 +66,10 @@
     <div class="pac-row-card fade-in">
         <div class="row-header">
             <span class="row-title">Nuovo ETF</span>
+            <!-- TASTO RIMUOVI TEMPLATE -->
+            <button type="button" class="btn-delete" title="Rimuovi ETF">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
         </div>
         <div class="form-grid-compact">
             <div class="form-group relative-container">
@@ -69,7 +77,11 @@
                 {{ formset.empty_form.ticker }}
                 <div class="ticker-feedback"></div>
             </div>
-            <div class="form-group"><label>Data Inizio</label>{{ formset.empty_form.data_inizio }}</div>
+            <div class="form-group">
+                <label>Data Inizio</label>
+                {{ formset.empty_form.data_inizio }}
+                <div class="date-feedback" style="font-size: 0.75rem; color: #64748b; margin-top: 4px; min-height: 1.2em;"></div>
+            </div>
             <div class="form-group"><label>Inv. Iniziale</label>{{ formset.empty_form.importo_iniziale }}</div>
             <div class="form-group"><label>Rata</label>{{ formset.empty_form.importo_periodico }}</div>
             <div class="form-group"><label>Frequenza</label>{{ formset.empty_form.frequenza }}</div>
@@ -82,67 +94,174 @@
         const addBtn = document.getElementById('add-btn');
         const formList = document.getElementById('form-list');
         const totalForms = document.getElementById('id_form-TOTAL_FORMS');
+        const submitBtn = document.getElementById('submit-btn');
         let debounceTimer;
 
-        // 1. Funzione per gestire l'aggiunta di nuovi form
+        // Helper per formattare data DD/MM/YYYY
+        function formatDateITA(isoDate) {
+            if (!isoDate) return '';
+            const [y, m, d] = isoDate.split('-');
+            return `${d}/${m}/${y}`;
+        }
+
+        // Funzione per aggiornare gli indici (0, 1, 2...) dopo una cancellazione
+        function updateFormIndices() {
+            const rows = formList.querySelectorAll('.pac-row-card');
+
+            // Aggiorna il contatore totale di Django
+            totalForms.value = rows.length;
+
+            rows.forEach((row, index) => {
+                // Aggiorna titolo visuale
+                row.querySelector('.row-title').textContent = `ETF #${index + 1}`;
+
+                // Aggiorna attributi 'name' e 'id' degli input per Django
+                // Esempio: form-3-ticker -> form-1-ticker
+                row.querySelectorAll('input, select').forEach(input => {
+                    const nameRegex = /form-\d+-/;
+                    const idRegex = /id_form-\d+-/;
+
+                    if (input.name) {
+                        input.name = input.name.replace(nameRegex, `form-${index}-`);
+                    }
+                    if (input.id) {
+                        input.id = input.id.replace(idRegex, `id_form-${index}-`);
+                    }
+                });
+            });
+        }
+
+        // Funzione centrale per validare il ticker
+        function validateTicker(inputField) {
+            const row = inputField.closest('.form-grid-compact');
+            const feedbackDiv = row.querySelector('.ticker-feedback');
+            const dateFeedbackDiv = row.querySelector('.date-feedback');
+            const dateInput = row.querySelector('input[type="date"]');
+            const ticker = inputField.value.trim();
+
+            if (ticker.length < 3) {
+                feedbackDiv.textContent = '';
+                inputField.dataset.valid = 'false';
+                updateButtonState();
+                return;
+            }
+
+            feedbackDiv.textContent = '🔍 Cerco...';
+            feedbackDiv.className = 'ticker-feedback text-gray';
+
+            fetch(`/api/validate-ticker/?ticker=${ticker}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.valid) {
+                        feedbackDiv.textContent = '✅ ' + data.name;
+                        feedbackDiv.className = 'ticker-feedback text-green';
+                        inputField.dataset.valid = 'true';
+
+                        if (data.first_date && dateInput) {
+                            dateInput.min = data.first_date;
+                            dateFeedbackDiv.textContent = `Dati disponibili dal: ${formatDateITA(data.first_date)}`;
+                            if (dateInput.value && dateInput.value < data.first_date) {
+                                dateInput.value = data.first_date;
+                            }
+                        }
+                    } else {
+                        feedbackDiv.textContent = '❌ ' + (data.error || 'Non trovato');
+                        feedbackDiv.className = 'ticker-feedback text-red';
+                        inputField.dataset.valid = 'false';
+                        dateFeedbackDiv.textContent = '';
+                        if (dateInput) dateInput.removeAttribute('min');
+                    }
+                    updateButtonState();
+                })
+                .catch(err => {
+                    feedbackDiv.textContent = '⚠️ Errore connessione';
+                    feedbackDiv.className = 'ticker-feedback text-red';
+                    inputField.dataset.valid = 'false';
+                    updateButtonState();
+                });
+        }
+
+        // Funzione per abilitare/disabilitare il pulsante submit
+        function updateButtonState() {
+            const inputs = document.querySelectorAll('.ticker-input');
+            const hasValues = Array.from(inputs).some(input => input.value.trim().length > 0);
+            const allValid = Array.from(inputs).every(input => {
+                const val = input.value.trim();
+                return val === '' || input.dataset.valid === 'true';
+            });
+
+            submitBtn.disabled = !(hasValues && allValid);
+        }
+
+        // 1. Aggiungi nuovo form
         addBtn.addEventListener('click', function() {
             let formCount = parseInt(totalForms.value);
             const emptyTemplate = document.getElementById('empty-form').innerHTML;
+            // Usiamo il count attuale per il nuovo ID
             const newHtml = emptyTemplate.replace(/__prefix__/g, formCount);
             const newDiv = document.createElement('div');
             newDiv.innerHTML = newHtml;
             formList.appendChild(newDiv);
-            totalForms.value = formCount + 1;
+
+            // Aggiorniamo contatori e indici
+            updateFormIndices();
+            updateButtonState();
         });
 
-        // 2. Event Delegation per ascoltare l'input su TUTTI i campi ticker (presenti e futuri)
+        // 2. Gestione Eliminazione (Event Delegation)
+        formList.addEventListener('click', function(e) {
+            // Controlla se il click è avvenuto sul tasto delete o sulla sua icona
+            const deleteBtn = e.target.closest('.btn-delete');
+            if (deleteBtn) {
+                // Non permettere di cancellare se c'è solo un form
+                if (formList.querySelectorAll('.pac-row-card').length <= 1) {
+                    // Opzionale: Mostra un avviso visivo che non si può cancellare l'ultimo
+                    return;
+                }
+
+                // Rimuovi la riga
+                const row = deleteBtn.closest('.pac-row-card');
+                row.remove();
+
+                // IMPORTANTE: Ricalcola tutti gli indici (0, 1, 2...)
+                updateFormIndices();
+                updateButtonState();
+            }
+        });
+
+        // 3. Event Listener Input (Validazione Live)
         formList.addEventListener('input', function(e) {
             if (e.target.classList.contains('ticker-input')) {
                 const inputField = e.target;
-                const feedbackDiv = inputField.parentElement.querySelector('.ticker-feedback');
-                const ticker = inputField.value.trim();
 
-                // Reset visuale
+                inputField.dataset.valid = 'false';
+                updateButtonState();
+
+                const feedbackDiv = inputField.parentElement.querySelector('.ticker-feedback');
                 feedbackDiv.textContent = 'Digitando...';
                 feedbackDiv.className = 'ticker-feedback text-gray';
 
                 clearTimeout(debounceTimer);
 
-                if (ticker.length < 3) {
-                    feedbackDiv.textContent = '';
-                    return;
-                }
-
-                // 3. Debounce: aspetta 600ms che l'utente finisca di scrivere
                 debounceTimer = setTimeout(() => {
-                    feedbackDiv.textContent = '🔍 Cerco...';
-
-                    fetch(`/api/validate-ticker/?ticker=${ticker}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.valid) {
-                                feedbackDiv.textContent = '✅ ' + data.name;
-                                feedbackDiv.className = 'ticker-feedback text-green';
-                            } else {
-                                feedbackDiv.textContent = '❌ ' + (data.error || 'Non trovato');
-                                feedbackDiv.className = 'ticker-feedback text-red';
-                            }
-                        })
-                        .catch(err => {
-                            feedbackDiv.textContent = '⚠️ Errore connessione';
-                            feedbackDiv.className = 'ticker-feedback text-red';
-                        });
+                    validateTicker(inputField);
                 }, 600);
             }
         });
+
+        // 4. Validazione Iniziale
+        document.querySelectorAll('.ticker-input').forEach(input => {
+            if (input.value.trim().length > 0) {
+                validateTicker(input);
+            }
+        });
+
+        updateButtonState();
     });
 </script>
 
 <style>
-    /* Stili per il feedback live */
-    .relative-container {
-        position: relative;
-    }
+    .relative-container { position: relative; }
     .ticker-feedback {
         font-size: 0.75rem;
         margin-top: 4px;
@@ -154,13 +273,13 @@
     .text-red { color: #ef4444; }
     .text-gray { color: #94a3b8; }
 
-    /* CSS esistente per Multi-Row */
     .pac-row-card {
         background: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 8px;
         padding: 1.5rem;
         margin-bottom: 1.5rem;
+        position: relative; /* Necessario per posizionamento assoluto se servisse */
     }
     .row-header {
         margin-bottom: 1rem;
@@ -170,7 +289,30 @@
         text-transform: uppercase;
         border-bottom: 1px solid #e2e8f0;
         padding-bottom: 0.5rem;
+
+        display: flex;
+        justify-content: space-between; /* Spinge titolo e tasto agli estremi */
+        align-items: center;
     }
+
+    .btn-delete {
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-delete:hover {
+        background-color: #fee2e2; /* Rosso chiaro sfondo */
+        color: #ef4444; /* Rosso testo */
+    }
+
     .form-grid-compact {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -189,6 +331,12 @@
     .btn-outline:hover {
         border-color: #cbd5e1;
         background: #f1f5f9;
+    }
+
+    button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none !important;
     }
 </style>
 {% endblock %}

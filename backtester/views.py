@@ -1,12 +1,10 @@
-import json
-
-import yfinance as yf
+from django.shortcuts import render, redirect
 from django.forms import formset_factory
 from django.http import JsonResponse
-from django.shortcuts import render, redirect
-
 from .forms import PACForm
 from .services import calcola_portafoglio_pac
+import json
+import yfinance as yf
 
 
 def home(request):
@@ -14,37 +12,43 @@ def home(request):
 
 
 def validate_ticker(request):
-    """API endpoint per controllare se un ticker esiste"""
+    """API endpoint per controllare se un ticker esiste e recuperare la data di inizio."""
     ticker = request.GET.get('ticker', '').upper().strip()
 
     if not ticker:
         return JsonResponse({'valid': False, 'error': 'Inserisci un ticker'})
 
     try:
-        # Usiamo yfinance per scaricare solo i metadati (veloce)
         ticker_obj = yf.Ticker(ticker)
 
-        # Proviamo a recuperare il nome.
-        # Nota: .info a volte può essere lento o fallire su Render free tier se l'IP è flaggato,
-        # ma è il metodo standard.
+        # 1. Recuperiamo le info di base (Nome)
+        # Nota: l'accesso a .info forza una chiamata API
         info = ticker_obj.info
+        long_name = info.get('longName') or info.get('shortName') or ticker
 
-        # Yahoo a volte restituisce un dizionario vuoto o con errori se non trova nulla
-        # ma non solleva eccezione. Controlliamo se ha un nome.
-        long_name = info.get('longName') or info.get('shortName')
+        # 2. Recuperiamo la prima data di trading disponibile
+        # Scarichiamo tutto lo storico (solo metadata se possibile sarebbe meglio, ma history è più affidabile)
+        # Usiamo 'max' per trovare l'inizio assoluto.
+        hist = ticker_obj.history(period="max", auto_adjust=False)
 
-        if long_name:
-            return JsonResponse({'valid': True, 'name': long_name})
-        else:
-            return JsonResponse({'valid': False, 'error': 'Ticker non trovato o dati non disponibili'})
+        if hist.empty:
+            return JsonResponse({'valid': False, 'error': 'Dati non disponibili per questo ticker'})
+
+        # Prendiamo la prima data dell'indice e la formattiamo YYYY-MM-DD
+        first_date = hist.index[0].date().isoformat()
+
+        return JsonResponse({
+            'valid': True,
+            'name': long_name,
+            'first_date': first_date  # <--- Inviamo la data minima al frontend
+        })
 
     except Exception as e:
-        return JsonResponse({'valid': False, 'error': 'Ticker non valido'})
+        print(f"Errore validazione {ticker}: {e}")
+        return JsonResponse({'valid': False, 'error': 'Ticker non valido o errore API'})
 
 
 def calcolatore(request):
-    # Creiamo un Formset: una fabbrica che genera N form di tipo PACForm
-    # extra=1 significa che mostra 1 form vuoto di default
     PACFormSet = formset_factory(PACForm, extra=1)
 
     if request.method == 'POST':
@@ -52,7 +56,6 @@ def calcolatore(request):
         if formset.is_valid():
             dati_input_list = []
             for form in formset:
-                # Il formset potrebbe contenere form vuoti se l'utente li ha lasciati tali
                 if form.cleaned_data and form.cleaned_data.get('ticker'):
                     dati = form.cleaned_data
                     dati['data_inizio'] = dati['data_inizio'].strftime('%Y-%m-%d')
@@ -62,7 +65,6 @@ def calcolatore(request):
                 request.session['dati_pac_list'] = dati_input_list
                 return redirect('risultati')
     else:
-        # Pre-popoliamo con un esempio se vuoto
         formset = PACFormSet()
 
     return render(request, 'backtester/input.html', {'formset': formset})
@@ -76,8 +78,6 @@ def risultati(request):
     risultato = calcola_portafoglio_pac(dati_list)
 
     if not risultato:
-        # Gestione caso errore download (es. ticker sbagliato)
-        # In un'app reale mostreremmo un messaggio di errore
         return redirect('calcolatore')
 
     context = {
