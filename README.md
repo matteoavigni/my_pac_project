@@ -4,6 +4,12 @@ A Django-based backtesting tool for ETF Accumulation Plans (PAC). Features histo
 
 ## Local deploy
 
+Create the Django DB:
+
+```bash
+python manage.py migrate
+```
+
 Run the command below to run a local instance of the server:
 
 ```bash
