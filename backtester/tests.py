@@ -209,6 +209,8 @@ class ViewAndApiTests(TestCase):
         resp = self.client.get(reverse('home'))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'MSCI World 100%')
+        self.assertContains(resp, 'id="loading-overlay"', count=1)
+        self.assertContains(resp, 'data-loading-trigger')
 
         api_resp = self.client.get(reverse('search_etf'), {'q': 'world'})
         self.assertEqual(api_resp.status_code, 200)
@@ -220,6 +222,7 @@ class ViewAndApiTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'SWDA.MI')
         self.assertContains(resp, 'XGLE.MI')
+        self.assertContains(resp, 'id="loading-overlay"', count=1)
 
         # Invalid submission: both initial and periodic = 0
         bad_post = self.client.post(

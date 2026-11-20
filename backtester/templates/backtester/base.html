@@ -69,6 +69,16 @@
         </div>
     </footer>
 
+    <div id="loading-overlay" class="loading-overlay no-print" aria-live="polite">
+        <div class="loading-card">
+            <div class="spinner"></div>
+            <h3 id="loading-title" style="margin: 0 0 0.4rem;">Calcolo Backtest in corso...</h3>
+            <p id="loading-subtitle" style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
+                Scaricamento serie storiche, tassi di cambio e analisi fiscale/drawdown.
+            </p>
+        </div>
+    </div>
+
     <script src="{% static 'backtester/theme.js' %}"></script>
     {% block extra_scripts %}{% endblock %}
 </body>

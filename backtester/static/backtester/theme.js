@@ -33,5 +33,30 @@
                 if (alert) alert.remove();
             });
         });
+
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingTitle = document.getElementById('loading-title');
+        const defaultLoadingTitle = loadingTitle ? loadingTitle.textContent : 'Calcolo Backtest in corso...';
+
+        if (loadingOverlay) {
+            document.querySelectorAll('[data-loading-trigger]').forEach(function (el) {
+                el.addEventListener('click', function (e) {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0 || el.target === '_blank') {
+                        return;
+                    }
+                    if (loadingTitle) {
+                        loadingTitle.textContent = el.dataset.loadingTitle || defaultLoadingTitle;
+                    }
+                    loadingOverlay.classList.add('active');
+                });
+            });
+
+            window.addEventListener('pageshow', function () {
+                loadingOverlay.classList.remove('active');
+                if (loadingTitle) {
+                    loadingTitle.textContent = defaultLoadingTitle;
+                }
+            });
+        }
     });
 })();

@@ -9,7 +9,7 @@
     </p>
     <div class="hero-actions">
         <a href="{% url 'calcolatore' %}" class="btn btn-primary btn-lg">Crea il tuo Portafoglio</a>
-        <a href="{% url 'demo_preset' 'world_100' %}" class="btn btn-outline btn-lg">Guarda Demo Live (MSCI World)</a>
+        <a href="{% url 'demo_preset' 'world_100' %}" class="btn btn-outline btn-lg" data-loading-trigger data-loading-title="Calcolo Demo: MSCI World 100%">Guarda Demo Live (MSCI World)</a>
     </div>
 </section>
 
@@ -34,7 +34,7 @@
                 </div>
             </div>
             <div class="preset-actions">
-                <a href="{% url 'demo_preset' preset.slug %}" class="btn btn-primary btn-sm">Simula subito</a>
+                <a href="{% url 'demo_preset' preset.slug %}" class="btn btn-primary btn-sm" data-loading-trigger data-loading-title="Calcolo Demo: {{ preset.title }}">Simula subito</a>
                 <a href="{% url 'calcolatore' %}?preset={{ preset.slug }}" class="btn btn-outline btn-sm">Personalizza</a>
             </div>
         </article>

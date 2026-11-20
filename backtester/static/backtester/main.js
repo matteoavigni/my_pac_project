@@ -277,8 +277,14 @@
         });
 
         form.addEventListener('submit', function () {
+            const loadingTitle = document.getElementById('loading-title');
+            if (loadingTitle) loadingTitle.textContent = 'Calcolo Backtest in corso...';
             if (loadingOverlay) loadingOverlay.classList.add('active');
             if (submitBtn) submitBtn.disabled = true;
+        });
+
+        window.addEventListener('pageshow', function () {
+            updateButtonState();
         });
 
         // Validazione iniziale sui campi precompilati
