@@ -1,115 +1,288 @@
 {% extends 'backtester/base.html' %}
-{% load l10n %}
+{% load l10n static %}
+
+{% block title %}Risultati Simulazione | PAC Simulator{% endblock %}
 
 {% block content %}
-<div class="results-header">
-    <a href="{% url 'calcolatore' %}" class="btn-back">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-        Nuova Simulazione
-    </a>
-    <h1>Performance Portafoglio Totale</h1>
+<div class="print-only">
+    <h1 style="margin: 0 0 4px;">Report Simulazione PAC ETF</h1>
+    <p style="margin: 0; font-size: 0.85rem; color: #475569;">
+        Orizzonte: {{ risultato.durata_anni }} anni ·
+        {% if risultato.options.reinvest_dividends %}Dividendi reinvestiti (DRIP){% else %}Dividendi in liquidità{% endif %} ·
+        {% if risultato.options.include_bollo %}Imposta di bollo 0,20% inclusa{% else %}Senza imposta di bollo{% endif %} ·
+        Commissione ordine: € {{ risultato.options.commissione_ordine }}
+    </p>
 </div>
 
-<!-- KPI CARDS GRID -->
+<div class="results-topbar no-print">
+    <div>
+        <h1>Risultati Simulazione PAC</h1>
+        <p style="margin: 0.25rem 0 0; font-size: 0.88rem; color: var(--text-muted);">
+            Orizzonte {{ risultato.durata_anni }} anni ·
+            {% if risultato.options.reinvest_dividends %}DRIP attivo{% else %}Dividendi non reinvestiti{% endif %} ·
+            {% if risultato.options.include_bollo %}Bollo 0,20% incluso{% else %}Senza bollo{% endif %}
+            {% if risultato.options.commissione_ordine > 0 %} · Comm. {{ risultato.options.commissione_ordine }} €/ord{% endif %}
+        </p>
+    </div>
+
+    <div class="action-group">
+        <a href="{% url 'calcolatore' %}?edit=1" class="btn btn-outline btn-sm">← Modifica Parametri</a>
+        <a href="{% url 'calcolatore' %}" class="btn btn-soft btn-sm">+ Nuova Simulazione</a>
+        <button type="button" id="btn-export-csv" class="btn btn-outline btn-sm">Esporta CSV</button>
+        <button type="button" id="btn-print-pdf" class="btn btn-primary btn-sm">Stampa / PDF</button>
+    </div>
+</div>
+
+<!-- 4 KPI PRINCIPALI -->
 <div class="kpi-grid">
-    <!-- 1. CAPITALE INVESTITO -->
-    <div class="kpi-card">
-        <span class="label">Totale Investito</span>
-        <span class="value fmt-currency" data-val="{{ risultato.investito|default:0|unlocalize }}">€ ...</span>
+    <div class="kpi-card accent-green">
+        <div class="kpi-head">
+            <span class="label">Valore Finale Netto</span>
+            <span class="info-tip">?
+                <span class="info-tip-text">Capitale netto incassabile oggi dopo tasse su capital gain, tasse sui dividendi, imposta di bollo e commissioni.</span>
+            </span>
+        </div>
+        <span class="value fmt-currency" data-val="{{ risultato.valore_netto|default:0|unlocalize }}">...</span>
+        <div class="sub-value">
+            <span class="{% if risultato.profitto_pct >= 0 %}badge-pos{% else %}badge-neg{% endif %}">
+                ROI {% if risultato.profitto_pct >= 0 %}+{% endif %}{{ risultato.profitto_pct }}%
+            </span>
+            <span style="margin-left: 6px;">Lordo: <span class="fmt-currency" data-val="{{ risultato.valore_finale_lordo|default:0|unlocalize }}"></span></span>
+        </div>
     </div>
 
-    <!-- 2. DIVIDENDI (Cash Flow) -->
-    <div class="kpi-card" style="border-left: 4px solid #8b5cf6;">
-        <span class="label">Dividendi Incassati (Netto)</span>
-        <span class="value fmt-currency" data-val="{{ risultato.dividendi_netti|default:0|unlocalize }}" style="color: #7c3aed;">€ ...</span>
+    <div class="kpi-card accent-indigo">
+        <div class="kpi-head">
+            <span class="label">Rendimento Annuo (XIRR)</span>
+            <span class="info-tip">?
+                <span class="info-tip-text">Tasso Interno di Rendimento annualizzato sui flussi reali di cassa netti (considera la data esatta di ogni versamento).</span>
+            </span>
+        </div>
+        <span class="value" style="color: var(--accent);">
+            {% if risultato.xirr_netto_pct is not None %}
+                {% if risultato.xirr_netto_pct >= 0 %}+{% endif %}{{ risultato.xirr_netto_pct }}%
+            {% else %}
+                N/D
+            {% endif %}
+        </span>
         <span class="sub-value">
-            Lordo: <span class="fmt-currency" data-val="{{ risultato.dividendi_lordi|default:0|unlocalize }}"></span>
+            ROI Lordo: {% if risultato.roi_lordo_pct >= 0 %}+{% endif %}{{ risultato.roi_lordo_pct }}% · {{ risultato.durata_anni }} anni
         </span>
     </div>
 
-    <!-- 3. CAPITAL GAIN (Apprezzamento Quote) -->
-    <div class="kpi-card success">
-        <span class="label">Profitto da Capitale (Netto)</span>
-        <span class="value fmt-currency" data-val="{{ risultato.plusvalenza_netta|default:0|unlocalize }}">€ ...</span>
+    <div class="kpi-card accent-violet">
+        <div class="kpi-head">
+            <span class="label">Versato &amp; Profitto Netto</span>
+            <span class="info-tip">?
+                <span class="info-tip-text">Totale capitale versato dall'investitore confrontato con il guadagno netto generato (plusvalenza + dividendi netti - oneri).</span>
+            </span>
+        </div>
+        <span class="value fmt-currency" data-val="{{ risultato.investito|default:0|unlocalize }}">...</span>
         <span class="sub-value">
-            Lordo: <span class="fmt-currency" data-val="{{ risultato.plusvalenza_lorda|default:0|unlocalize }}"></span>
+            Profitto Netto:
+            <strong style="color: {% if risultato.profitto_netto >= 0 %}var(--primary){% else %}var(--danger){% endif %};">
+                <span class="fmt-currency" data-val="{{ risultato.profitto_netto|default:0|unlocalize }}"></span>
+            </strong>
         </span>
     </div>
 
-    <!-- 4. TOTALE NETTO (Exit Value) -->
-    <div class="kpi-card info">
-        <span class="label">Valore Finale (Tutto Incluso)</span>
-        <span class="value fmt-currency" data-val="{{ risultato.valore_netto|default:0|unlocalize }}">€ ...</span>
-        <span class="sub-value">ROI Netto: +{{ risultato.profitto_pct }}%</span>
+    <div class="kpi-card accent-red">
+        <div class="kpi-head">
+            <span class="label">Max Drawdown &amp; Rischio</span>
+            <span class="info-tip">?
+                <span class="info-tip-text">Massima perdita percentuale e monetaria dal picco al fondo sul valore di mercato, e volatilità annualizzata TWRR.</span>
+            </span>
+        </div>
+        <span class="value" style="color: var(--danger);">{{ risultato.max_drawdown_pct }}%</span>
+        <span class="sub-value">
+            Picco-Fondo: <span class="fmt-currency" data-val="{{ risultato.max_drawdown_euro|default:0|unlocalize }}"></span> · Vol: {{ risultato.volatilita_annua }}%
+        </span>
     </div>
 </div>
 
-<!-- GRAFICO -->
-<div class="card card-chart">
+<!-- GRAFICO PRINCIPALE -->
+<div class="card">
+    <div class="chart-header">
+        <h3>Andamento Portafoglio nel Tempo</h3>
+        <div class="chart-toggles no-print">
+            <label class="chart-toggle-pill">
+                <input type="checkbox" id="toggle-pic" checked> Confronta con PIC (Lump Sum)
+            </label>
+            <label class="chart-toggle-pill">
+                <input type="checkbox" id="toggle-lordo"> Mostra Valore Lordo
+            </label>
+        </div>
+    </div>
     <div class="chart-wrapper">
         <canvas id="pacChart"></canvas>
     </div>
 </div>
 
-<!-- TABELLA DETTAGLIO ETF -->
-<div class="card" style="margin-top: 2rem;">
-    <h3>Dettaglio per ETF</h3>
-    <div style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
-            <thead>
-                <tr style="text-align: left; border-bottom: 2px solid #e2e8f0;">
-                    <th style="padding: 10px;">Ticker</th>
-                    <th style="padding: 10px;">Investito</th>
-                    <th style="padding: 10px;">Dividendi Netti</th>
-                    <th style="padding: 10px;">Capital Gain Netto</th>
-                    <th style="padding: 10px;">Profitto Totale</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in risultato.dettagli_singoli %}
-                <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 12px; font-weight: 600;">
-                        {{ item.ticker }}
-                        <span style="display:block; font-size: 0.75rem; color: #94a3b8; font-weight:normal;">{{ item.currency }}</span>
-                    </td>
-                    <td style="padding: 12px;" class="fmt-currency" data-val="{{ item.investito|default:0|unlocalize }}"></td>
-                    <td style="padding: 12px; color: #7c3aed;" class="fmt-currency" data-val="{{ item.dividendi_netti|default:0|unlocalize }}"></td>
-                    <td style="padding: 12px; color: #10b981;" class="fmt-currency" data-val="{{ item.plusvalenza_netta|default:0|unlocalize }}"></td>
-                    <td style="padding: 12px; font-weight: 600; color: {% if item.profitto_netto > 0 %}#10b981{% else %}#ef4444{% endif %};"
-                        class="fmt-currency" data-val="{{ item.profitto_netto|default:0|unlocalize }}">
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<!-- GRAFICO DRAWDOWN -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="chart-header">
+        <h3>Drawdown Storico (% dal Massimo Precedente)</h3>
+    </div>
+    <div class="chart-wrapper-sm">
+        <canvas id="drawdownChart"></canvas>
     </div>
 </div>
 
-<!-- NUOVA SEZIONE: TABELLA TOP 5 DRAWDOWN -->
-<div class="card" style="margin-top: 2rem; border-left: 4px solid #ef4444;">
-    <h3>Analisi Rischio: Top 5 Drawdown</h3>
-    <p style="font-size: 0.9rem; color: #64748b; margin-bottom: 1rem;">I momenti peggiori vissuti dal portafoglio (dal picco al fondo).</p>
+<!-- CONFRONTO PAC vs PIC + DETTAGLIO FISCALE -->
+<div class="two-col-grid">
+    <div class="card">
+        <div class="card-header" style="margin-bottom: 0.75rem;">
+            <h3>Confronto PAC vs PIC (Lump Sum)</h3>
+            <p>Stesso capitale totale (<strong><span class="fmt-currency" data-val="{{ risultato.investito|default:0|unlocalize }}"></span></strong>) investito a rate vs tutto al giorno 1.</p>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Strategia</th>
+                        <th class="text-right">Valore Netto</th>
+                        <th class="text-right">ROI</th>
+                        <th class="text-right">XIRR</th>
+                        <th class="text-right">Max DD</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>PAC (Graduale)</strong></td>
+                        <td class="text-right fmt-currency" data-val="{{ risultato.valore_netto|default:0|unlocalize }}"></td>
+                        <td class="text-right">{% if risultato.profitto_pct >= 0 %}+{% endif %}{{ risultato.profitto_pct }}%</td>
+                        <td class="text-right">{% if risultato.xirr_netto_pct is not None %}{{ risultato.xirr_netto_pct }}%{% else %}N/D{% endif %}</td>
+                        <td class="text-right" style="color: var(--danger);">{{ risultato.max_drawdown_pct }}%</td>
+                    </tr>
+                    <tr>
+                        <td><strong>PIC (Tutto Subito)</strong></td>
+                        <td class="text-right fmt-currency" data-val="{{ risultato.pic.valore_netto|default:0|unlocalize }}"></td>
+                        <td class="text-right">{% if risultato.pic.roi_netto_pct >= 0 %}+{% endif %}{{ risultato.pic.roi_netto_pct }}%</td>
+                        <td class="text-right">{% if risultato.pic.xirr_pct is not None %}{{ risultato.pic.xirr_pct }}%{% else %}N/D{% endif %}</td>
+                        <td class="text-right" style="color: var(--danger);">{{ risultato.pic.max_drawdown_pct }}%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p style="margin: 0.85rem 0 0; font-size: 0.85rem; color: var(--text-muted);">
+            Differenza PAC rispetto a PIC:
+            <strong style="color: {% if risultato.pic.differenza_euro >= 0 %}var(--primary){% else %}var(--danger){% endif %};">
+                <span class="fmt-currency" data-val="{{ risultato.pic.differenza_euro|default:0|unlocalize }}"></span>
+            </strong>
+        </p>
+    </div>
 
-    <div style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse;">
+    <div class="card">
+        <div class="card-header" style="margin-bottom: 0.75rem;">
+            <h3>Impatto Fiscale &amp; Costi</h3>
+            <p>Riepilogo di imposte italiane e commissioni applicate nella simulazione.</p>
+        </div>
+        <div>
+            <div class="metric-row">
+                <span>Imposta su Capital Gain (in uscita)</span>
+                <strong class="fmt-currency" data-val="{{ risultato.tasse_capital_gain|default:0|unlocalize }}"></strong>
+            </div>
+            <div class="metric-row">
+                <span>Imposta su Dividendi incassati</span>
+                <strong class="fmt-currency" data-val="{{ risultato.tasse_dividendi|default:0|unlocalize }}"></strong>
+            </div>
+            <div class="metric-row">
+                <span>Imposta di Bollo (0,20% annuo)</span>
+                <strong class="fmt-currency" data-val="{{ risultato.bollo_totale|default:0|unlocalize }}"></strong>
+            </div>
+            <div class="metric-row">
+                <span>Commissioni di negoziazione</span>
+                <strong class="fmt-currency" data-val="{{ risultato.commissioni_totale|default:0|unlocalize }}"></strong>
+            </div>
+            <div class="metric-row total">
+                <span>Totale Oneri Fiscali &amp; Costi</span>
+                <span style="color: var(--danger);" class="fmt-currency" data-val="{{ risultato.tasse|default:0|unlocalize }}"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DETTAGLIO PER ETF & ALLOCAZIONE -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header" style="margin-bottom: 0.75rem;">
+        <h3>Dettaglio per Singolo ETF</h3>
+    </div>
+
+    <div class="{% if risultato.allocazione|length > 1 %}allocation-grid{% endif %}">
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ETF</th>
+                        <th class="text-right">Peso</th>
+                        <th class="text-right">Versato</th>
+                        <th class="text-right">Dividendi Netti</th>
+                        <th class="text-right">Valore Netto</th>
+                        <th class="text-right">Profitto Netto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in risultato.dettagli_singoli %}
+                    <tr>
+                        <td>
+                            <strong>{{ item.ticker }}</strong>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                {{ item.name|truncatechars:42 }} · {{ item.currency }} · Tax {{ item.aliquota }}%
+                            </div>
+                        </td>
+                        <td class="text-right">{{ item.peso_pct }}%</td>
+                        <td class="text-right fmt-currency" data-val="{{ item.investito|default:0|unlocalize }}"></td>
+                        <td class="text-right fmt-currency" data-val="{{ item.dividendi_netti|default:0|unlocalize }}"></td>
+                        <td class="text-right fmt-currency" data-val="{{ item.valore_netto|default:0|unlocalize }}"></td>
+                        <td class="text-right" style="font-weight: 700; color: {% if item.profitto_netto >= 0 %}var(--primary){% else %}var(--danger){% endif %};">
+                            <span class="fmt-currency" data-val="{{ item.profitto_netto|default:0|unlocalize }}"></span>
+                            <div style="font-size: 0.75rem;">({% if item.roi_pct >= 0 %}+{% endif %}{{ item.roi_pct }}%)</div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if risultato.allocazione|length > 1 %}
+        <div class="chart-wrapper-doughnut">
+            <canvas id="allocationChart"></canvas>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- TOP 5 DRAWDOWN -->
+<div class="card" style="margin-top: 1.5rem; border-left: 4px solid var(--danger);">
+    <div class="card-header" style="margin-bottom: 0.75rem;">
+        <h3>Analisi Rischio: Top 5 Drawdown Storici</h3>
+        <p>I peggiori periodi vissuti dal portafoglio (dal picco massimo al punto di minimo e successivo recupero).</p>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table">
             <thead>
-                <tr style="text-align: left; border-bottom: 2px solid #e2e8f0;">
-                    <th style="padding: 10px;">Periodo (Picco - Fondo)</th>
-                    <th style="padding: 10px;">Perdita %</th>
-                    <th style="padding: 10px;">Perdita Monetaria</th>
+                <tr>
+                    <th>Periodo (Picco - Fondo)</th>
+                    <th class="text-right">Durata Discesa</th>
+                    <th class="text-right">Perdita %</th>
+                    <th class="text-right">Perdita €</th>
+                    <th class="text-right">Recupero Totale</th>
                 </tr>
             </thead>
             <tbody>
                 {% for dd in risultato.top_drawdowns %}
-                <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 12px; font-weight: 600; color: #334155;">{{ dd.period }}</td>
-                    <td style="padding: 12px; color: #ef4444; font-weight: 700;">{{ dd.pct|floatformat:2 }}%</td>
-                    <td style="padding: 12px; color: #ef4444;" class="fmt-currency" data-val="{{ dd.euro|default:0|unlocalize }}"></td>
+                <tr>
+                    <td><strong>{{ dd.period }}</strong></td>
+                    <td class="text-right">{{ dd.drop_days }} gg</td>
+                    <td class="text-right" style="color: var(--danger); font-weight: 700;">{{ dd.pct|floatformat:2 }}%</td>
+                    <td class="text-right fmt-currency" style="color: var(--danger);" data-val="{{ dd.euro|default:0|unlocalize }}"></td>
+                    <td class="text-right">{{ dd.recovery_label }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="3" style="padding: 20px; text-align: center; color: #94a3b8;">
-                        Nessun drawdown significativo rilevato.
+                    <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
+                        Nessun drawdown rilevato nel periodo selezionato.
                     </td>
                 </tr>
                 {% endfor %}
@@ -118,191 +291,47 @@
     </div>
 </div>
 
-<!-- SCRIPT LOGICA (Invariato) -->
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
+<!-- RIEPILOGO ANNUALE -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header" style="margin-bottom: 0.75rem;">
+        <h3>Riepilogo Anno per Anno</h3>
+        <p>Progressione dei versamenti, valore netto a fine anno e performance annuale Time-Weighted (TWRR).</p>
+    </div>
 
-        function formatEuro(number) {
-            if (isNaN(number)) return "€ 0,00";
-            let isNegative = number < 0;
-            number = Math.abs(number);
-            let parts = Number(number).toFixed(2).split('.');
-            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-            return (isNegative ? '-' : '') + parts.join(',') + ' €';
-        }
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Anno</th>
+                    <th class="text-right">Versato Anno</th>
+                    <th class="text-right">Versato Cumulato</th>
+                    <th class="text-right">Dividendi Netti</th>
+                    <th class="text-right">Valore Netto Fine Anno</th>
+                    <th class="text-right">Rendimento Anno</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in risultato.riepilogo_annuale %}
+                <tr>
+                    <td><strong>{{ row.anno }}</strong></td>
+                    <td class="text-right fmt-currency" data-val="{{ row.versato_anno|default:0|unlocalize }}"></td>
+                    <td class="text-right fmt-currency" data-val="{{ row.versato_cumulato|default:0|unlocalize }}"></td>
+                    <td class="text-right fmt-currency" data-val="{{ row.dividendi_anno|default:0|unlocalize }}"></td>
+                    <td class="text-right fmt-currency" style="font-weight: 700;" data-val="{{ row.valore_fine_anno|default:0|unlocalize }}"></td>
+                    <td class="text-right" style="font-weight: 700; color: {% if row.variazione_pct >= 0 %}var(--primary){% else %}var(--danger){% endif %};">
+                        {% if row.variazione_pct >= 0 %}+{% endif %}{{ row.variazione_pct }}%
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 
-        const currencyElements = document.querySelectorAll('.fmt-currency');
+{{ risultato.storico_grafico|json_script:"pac-chart-data" }}
+{{ risultato.allocazione|json_script:"pac-alloc-data" }}
+{% endblock %}
 
-        currencyElements.forEach(el => {
-            let rawData = el.getAttribute('data-val');
-            if (rawData) {
-                rawData = rawData.replace(',', '.');
-            }
-            const rawVal = parseFloat(rawData);
-            el.textContent = formatEuro(rawVal);
-        });
-
-        const rawData = {{ grafico_json|safe }};
-
-        const labels = rawData.map(d => d.date);
-        const investito = rawData.map(d => d.investito);
-        const valore = rawData.map(d => d.valore);
-
-        const ctx = document.getElementById('pacChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Valore Totale (Asset + Cash)',
-                        data: valore,
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        pointHoverRadius: 6,
-                        hitRadius: 10
-                    },
-                    {
-                        label: 'Capitale Versato',
-                        data: investito,
-                        borderColor: '#94a3b8',
-                        borderDash: [5, 5],
-                        tension: 0.1,
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        pointHoverRadius: 6,
-                        hitRadius: 10
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    label += formatEuro(context.parsed.y);
-                                }
-                                return label;
-                            }
-                        }
-                    },
-                    legend: {
-                        labels: {
-                            usePointStyle: true,
-                            boxWidth: 10
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: { maxTicksLimit: 8, maxRotation: 0 }
-                    },
-                    y: {
-                        grid: { borderDash: [2, 4], color: '#f1f5f9' },
-                        ticks: {
-                            callback: function(value) {
-                                return '€' + (value / 1000).toFixed(0) + 'k';
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    });
-</script>
-
-<style>
-    .chart-wrapper {
-        position: relative;
-        width: 100%;
-        height: 450px;
-        overflow: hidden;
-    }
-
-    @media (max-width: 768px) {
-        .card-chart { padding: 10px !important; }
-        .chart-wrapper { height: 300px; }
-    }
-
-    .btn-back {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background-color: #fff;
-        color: #64748b;
-        padding: 8px 16px;
-        border-radius: 99px;
-        border: 1px solid #e2e8f0;
-        font-weight: 600;
-        font-size: 0.9rem;
-        text-decoration: none;
-        transition: all 0.2s ease;
-        margin-bottom: 1rem;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }
-
-    .btn-back:hover {
-        background-color: #f8fafc;
-        border-color: #cbd5e1;
-        color: #334155;
-        transform: translateX(-2px);
-    }
-
-    .custom-tooltip {
-        position: relative;
-        display: inline-block;
-    }
-    .custom-tooltip .tooltip-text {
-        visibility: hidden;
-        width: 240px;
-        background-color: #1e293b;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 8px 12px;
-        position: absolute;
-        z-index: 10;
-        bottom: 130%;
-        left: 50%;
-        transform: translateX(-50%);
-        opacity: 0;
-        transition: opacity 0.2s;
-        font-size: 0.75rem;
-        line-height: 1.4;
-        font-weight: normal;
-        box-shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.2);
-        pointer-events: none;
-    }
-    .custom-tooltip .tooltip-text::after {
-        content: "";
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        margin-left: -5px;
-        border-width: 5px;
-        border-style: solid;
-        border-color: #1e293b transparent transparent transparent;
-    }
-    .custom-tooltip:hover .tooltip-text {
-        visibility: visible;
-        opacity: 1;
-        bottom: 140%;
-    }
-</style>
+{% block extra_scripts %}
+<script src="{% static 'backtester/results.js' %}"></script>
 {% endblock %}

@@ -1,342 +1,169 @@
 {% extends 'backtester/base.html' %}
+{% load static %}
+
+{% block title %}Configura Portafoglio | PAC Simulator{% endblock %}
 
 {% block content %}
-<div class="card form-container" style="max-width: 800px;">
-    <div class="card-header">
-        <h2>Costruisci il Portafoglio</h2>
-        <p>Aggiungi gli ETF che compongono il tuo piano.</p>
+<div class="form-shell">
+    <div class="preset-bar">
+        <span class="preset-bar-label">Preset rapidi:</span>
+        {% for preset in presets %}
+        <a href="{% url 'calcolatore' %}?preset={{ preset.slug }}"
+           class="preset-pill-link {% if active_preset == preset.slug %}active{% endif %}">
+            {{ preset.title }}
+        </a>
+        {% endfor %}
     </div>
 
-    <form method="post" class="pac-form">
-        {% csrf_token %}
-        {{ formset.management_form }}
+    <div class="card">
+        <div class="card-header">
+            <h2>Costruisci il tuo Portafoglio PAC</h2>
+            <p>Cerca tra gli ETF più diffusi o inserisci qualsiasi ticker Yahoo Finance (es. <code>SWDA.MI</code>, <code>VWCE.MI</code>, <code>VOO</code>).</p>
+        </div>
 
-        <div id="form-list">
-            {% for form in formset %}
-            <div class="pac-row-card fade-in">
-                <div class="row-header">
-                    <span class="row-title">ETF #{{ forloop.counter }}</span>
-                    <!-- TASTO RIMUOVI -->
-                    <button type="button" class="btn-delete" title="Rimuovi ETF">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
+        <form method="post" id="pac-builder-form" novalidate>
+            {% csrf_token %}
+            {{ formset.management_form }}
+
+            {% if formset.non_form_errors %}
+            <div class="alert alert-error">{{ formset.non_form_errors }}</div>
+            {% endif %}
+
+            <div id="form-list">
+                {% for form in formset %}
+                <div class="pac-row-card">
+                    <div class="row-header">
+                        <span class="row-title">ETF #{{ forloop.counter }}</span>
+                        <button type="button" class="btn-delete" title="Rimuovi ETF" aria-label="Rimuovi ETF">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="field-errors" style="margin-bottom: 0.75rem;">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="form-grid-compact">
+                        <div class="form-group">
+                            <label for="{{ form.ticker.id_for_label }}">Ticker ETF</label>
+                            {{ form.ticker }}
+                            <div class="autocomplete-dropdown"></div>
+                            <div class="ticker-feedback"></div>
+                            {{ form.ticker.errors }}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="{{ form.data_inizio.id_for_label }}">Data Inizio</label>
+                            {{ form.data_inizio }}
+                            <div class="date-feedback text-gray"></div>
+                            {{ form.data_inizio.errors }}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="{{ form.importo_iniziale.id_for_label }}">Inv. Iniziale (€)</label>
+                            {{ form.importo_iniziale }}
+                            {{ form.importo_iniziale.errors }}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="{{ form.importo_periodico.id_for_label }}">Rata (€)</label>
+                            {{ form.importo_periodico }}
+                            {{ form.importo_periodico.errors }}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="{{ form.frequenza.id_for_label }}">Frequenza</label>
+                            {{ form.frequenza }}
+                            {{ form.frequenza.errors }}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="{{ form.aliquota_fiscale.id_for_label }}">Tassazione</label>
+                            {{ form.aliquota_fiscale }}
+                            {{ form.aliquota_fiscale.errors }}
+                        </div>
+                    </div>
                 </div>
+                {% endfor %}
+            </div>
 
-                <div class="form-grid-compact">
-                    <div class="form-group relative-container">
-                        <label>Ticker</label>
-                        {{ form.ticker }}
-                        <div class="ticker-feedback"></div>
-                    </div>
+            <div class="options-panel">
+                <h3>Impostazioni Fiscali &amp; Costi di Simulazione</h3>
+                <div class="options-grid">
+                    <label class="checkbox-field" for="{{ options_form.reinvest_dividends.id_for_label }}">
+                        {{ options_form.reinvest_dividends }}
+                        <span>
+                            Reinvesti dividendi netti (DRIP)
+                            <span class="checkbox-hint">I dividendi tassati acquistano subito nuove quote</span>
+                        </span>
+                    </label>
+
+                    <label class="checkbox-field" for="{{ options_form.include_bollo.id_for_label }}">
+                        {{ options_form.include_bollo }}
+                        <span>
+                            Imposta di bollo (0,20%/anno)
+                            <span class="checkbox-hint">Addebitata a fine anno solare sul controvalore</span>
+                        </span>
+                    </label>
+
                     <div class="form-group">
-                        <label>Data Inizio</label>
-                        {{ form.data_inizio }}
-                        <div class="date-feedback" style="font-size: 0.75rem; color: #64748b; margin-top: 4px; min-height: 1.2em;"></div>
-                    </div>
-                    <div class="form-group">
-                        <label>Investimento Iniziale</label>
-                        {{ form.importo_iniziale }}
-                    </div>
-                    <div class="form-group">
-                        <label>Rata</label>
-                        {{ form.importo_periodico }}
-                    </div>
-                    <div class="form-group">
-                        <label>Frequenza</label>
-                        {{ form.frequenza }}
+                        <label for="{{ options_form.commissione_ordine.id_for_label }}">Commissione per eseguito (€)</label>
+                        {{ options_form.commissione_ordine }}
+                        {{ options_form.commissione_ordine.errors }}
                     </div>
                 </div>
             </div>
-            {% endfor %}
-        </div>
 
-        <div class="form-actions-row">
-            <button type="button" id="add-btn" class="btn btn-outline">
-                + Aggiungi un altro ETF
-            </button>
-            <button type="submit" id="submit-btn" class="btn btn-primary" disabled>
-                Calcola performance
-            </button>
-        </div>
-    </form>
+            <div id="live-summary" class="live-summary-bar"></div>
+
+            <div class="form-actions-row">
+                <button type="button" id="add-btn" class="btn btn-outline">+ Aggiungi un altro ETF</button>
+                <button type="submit" id="submit-btn" class="btn btn-primary btn-lg">Calcola Performance →</button>
+            </div>
+        </form>
+    </div>
 </div>
 
-<!-- Template Nascosto -->
-<div id="empty-form" style="display:none;">
-    <div class="pac-row-card fade-in">
+<!-- Template riga vuota per nuovi ETF -->
+<div id="empty-form" style="display: none;">
+    <div class="pac-row-card">
         <div class="row-header">
             <span class="row-title">Nuovo ETF</span>
-            <!-- TASTO RIMUOVI TEMPLATE -->
-            <button type="button" class="btn-delete" title="Rimuovi ETF">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <button type="button" class="btn-delete" title="Rimuovi ETF" aria-label="Rimuovi ETF">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
         </div>
         <div class="form-grid-compact">
-            <div class="form-group relative-container">
-                <label>Ticker</label>
+            <div class="form-group">
+                <label>Ticker ETF</label>
                 {{ formset.empty_form.ticker }}
+                <div class="autocomplete-dropdown"></div>
                 <div class="ticker-feedback"></div>
             </div>
             <div class="form-group">
                 <label>Data Inizio</label>
                 {{ formset.empty_form.data_inizio }}
-                <div class="date-feedback" style="font-size: 0.75rem; color: #64748b; margin-top: 4px; min-height: 1.2em;"></div>
+                <div class="date-feedback text-gray"></div>
             </div>
-            <div class="form-group"><label>Inv. Iniziale</label>{{ formset.empty_form.importo_iniziale }}</div>
-            <div class="form-group"><label>Rata</label>{{ formset.empty_form.importo_periodico }}</div>
+            <div class="form-group"><label>Inv. Iniziale (€)</label>{{ formset.empty_form.importo_iniziale }}</div>
+            <div class="form-group"><label>Rata (€)</label>{{ formset.empty_form.importo_periodico }}</div>
             <div class="form-group"><label>Frequenza</label>{{ formset.empty_form.frequenza }}</div>
+            <div class="form-group"><label>Tassazione</label>{{ formset.empty_form.aliquota_fiscale }}</div>
         </div>
     </div>
 </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const addBtn = document.getElementById('add-btn');
-        const formList = document.getElementById('form-list');
-        const totalForms = document.getElementById('id_form-TOTAL_FORMS');
-        const submitBtn = document.getElementById('submit-btn');
-        let debounceTimer;
+<div id="loading-overlay" class="loading-overlay" aria-live="polite">
+    <div class="loading-card">
+        <div class="spinner"></div>
+        <h3 style="margin: 0 0 0.4rem;">Calcolo Backtest in corso...</h3>
+        <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
+            Scaricamento serie storiche, tassi di cambio e analisi fiscale/drawdown.
+        </p>
+    </div>
+</div>
+{% endblock %}
 
-        // Helper per formattare data DD/MM/YYYY
-        function formatDateITA(isoDate) {
-            if (!isoDate) return '';
-            const [y, m, d] = isoDate.split('-');
-            return `${d}/${m}/${y}`;
-        }
-
-        // Funzione per aggiornare gli indici (0, 1, 2...) dopo una cancellazione
-        function updateFormIndices() {
-            const rows = formList.querySelectorAll('.pac-row-card');
-
-            // Aggiorna il contatore totale di Django
-            totalForms.value = rows.length;
-
-            rows.forEach((row, index) => {
-                // Aggiorna titolo visuale
-                row.querySelector('.row-title').textContent = `ETF #${index + 1}`;
-
-                // Aggiorna attributi 'name' e 'id' degli input per Django
-                // Esempio: form-3-ticker -> form-1-ticker
-                row.querySelectorAll('input, select').forEach(input => {
-                    const nameRegex = /form-\d+-/;
-                    const idRegex = /id_form-\d+-/;
-
-                    if (input.name) {
-                        input.name = input.name.replace(nameRegex, `form-${index}-`);
-                    }
-                    if (input.id) {
-                        input.id = input.id.replace(idRegex, `id_form-${index}-`);
-                    }
-                });
-            });
-        }
-
-        // Funzione centrale per validare il ticker
-        function validateTicker(inputField) {
-            const row = inputField.closest('.form-grid-compact');
-            const feedbackDiv = row.querySelector('.ticker-feedback');
-            const dateFeedbackDiv = row.querySelector('.date-feedback');
-            const dateInput = row.querySelector('input[type="date"]');
-            const ticker = inputField.value.trim();
-
-            if (ticker.length < 3) {
-                feedbackDiv.textContent = '';
-                inputField.dataset.valid = 'false';
-                updateButtonState();
-                return;
-            }
-
-            feedbackDiv.textContent = '🔍 Cerco...';
-            feedbackDiv.className = 'ticker-feedback text-gray';
-
-            fetch(`/api/validate-ticker/?ticker=${ticker}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.valid) {
-                        feedbackDiv.textContent = '✅ ' + data.name;
-                        feedbackDiv.className = 'ticker-feedback text-green';
-                        inputField.dataset.valid = 'true';
-
-                        if (data.first_date && dateInput) {
-                            dateInput.min = data.first_date;
-                            dateFeedbackDiv.textContent = `Dati disponibili dal: ${formatDateITA(data.first_date)}`;
-                            if (dateInput.value && dateInput.value < data.first_date) {
-                                dateInput.value = data.first_date;
-                            }
-                        }
-                    } else {
-                        feedbackDiv.textContent = '❌ ' + (data.error || 'Non trovato');
-                        feedbackDiv.className = 'ticker-feedback text-red';
-                        inputField.dataset.valid = 'false';
-                        dateFeedbackDiv.textContent = '';
-                        if (dateInput) dateInput.removeAttribute('min');
-                    }
-                    updateButtonState();
-                })
-                .catch(err => {
-                    feedbackDiv.textContent = '⚠️ Errore connessione';
-                    feedbackDiv.className = 'ticker-feedback text-red';
-                    inputField.dataset.valid = 'false';
-                    updateButtonState();
-                });
-        }
-
-        // Funzione per abilitare/disabilitare il pulsante submit
-        function updateButtonState() {
-            const inputs = document.querySelectorAll('.ticker-input');
-            const hasValues = Array.from(inputs).some(input => input.value.trim().length > 0);
-            const allValid = Array.from(inputs).every(input => {
-                const val = input.value.trim();
-                return val === '' || input.dataset.valid === 'true';
-            });
-
-            submitBtn.disabled = !(hasValues && allValid);
-        }
-
-        // 1. Aggiungi nuovo form
-        addBtn.addEventListener('click', function() {
-            let formCount = parseInt(totalForms.value);
-            const emptyTemplate = document.getElementById('empty-form').innerHTML;
-            // Usiamo il count attuale per il nuovo ID
-            const newHtml = emptyTemplate.replace(/__prefix__/g, formCount);
-            const newDiv = document.createElement('div');
-            newDiv.innerHTML = newHtml;
-            formList.appendChild(newDiv);
-
-            // Aggiorniamo contatori e indici
-            updateFormIndices();
-            updateButtonState();
-        });
-
-        // 2. Gestione Eliminazione (Event Delegation)
-        formList.addEventListener('click', function(e) {
-            // Controlla se il click è avvenuto sul tasto delete o sulla sua icona
-            const deleteBtn = e.target.closest('.btn-delete');
-            if (deleteBtn) {
-                // Non permettere di cancellare se c'è solo un form
-                if (formList.querySelectorAll('.pac-row-card').length <= 1) {
-                    // Opzionale: Mostra un avviso visivo che non si può cancellare l'ultimo
-                    return;
-                }
-
-                // Rimuovi la riga
-                const row = deleteBtn.closest('.pac-row-card');
-                row.remove();
-
-                // IMPORTANTE: Ricalcola tutti gli indici (0, 1, 2...)
-                updateFormIndices();
-                updateButtonState();
-            }
-        });
-
-        // 3. Event Listener Input (Validazione Live)
-        formList.addEventListener('input', function(e) {
-            if (e.target.classList.contains('ticker-input')) {
-                const inputField = e.target;
-
-                inputField.dataset.valid = 'false';
-                updateButtonState();
-
-                const feedbackDiv = inputField.parentElement.querySelector('.ticker-feedback');
-                feedbackDiv.textContent = 'Digitando...';
-                feedbackDiv.className = 'ticker-feedback text-gray';
-
-                clearTimeout(debounceTimer);
-
-                debounceTimer = setTimeout(() => {
-                    validateTicker(inputField);
-                }, 600);
-            }
-        });
-
-        // 4. Validazione Iniziale
-        document.querySelectorAll('.ticker-input').forEach(input => {
-            if (input.value.trim().length > 0) {
-                validateTicker(input);
-            }
-        });
-
-        updateButtonState();
-    });
-</script>
-
-<style>
-    .relative-container { position: relative; }
-    .ticker-feedback {
-        font-size: 0.75rem;
-        margin-top: 4px;
-        min-height: 1.2em;
-        font-weight: 600;
-        transition: all 0.2s;
-    }
-    .text-green { color: #10b981; }
-    .text-red { color: #ef4444; }
-    .text-gray { color: #94a3b8; }
-
-    .pac-row-card {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        position: relative; /* Necessario per posizionamento assoluto se servisse */
-    }
-    .row-header {
-        margin-bottom: 1rem;
-        font-weight: 700;
-        color: #64748b;
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        border-bottom: 1px solid #e2e8f0;
-        padding-bottom: 0.5rem;
-
-        display: flex;
-        justify-content: space-between; /* Spinge titolo e tasto agli estremi */
-        align-items: center;
-    }
-
-    .btn-delete {
-        background: transparent;
-        border: none;
-        color: #94a3b8;
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 4px;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .btn-delete:hover {
-        background-color: #fee2e2; /* Rosso chiaro sfondo */
-        color: #ef4444; /* Rosso testo */
-    }
-
-    .form-grid-compact {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 1rem;
-    }
-    .form-actions-row {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 2rem;
-    }
-    .btn-outline {
-        background: transparent;
-        border: 2px solid #e2e8f0;
-        color: #475569;
-    }
-    .btn-outline:hover {
-        border-color: #cbd5e1;
-        background: #f1f5f9;
-    }
-
-    button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none !important;
-    }
-</style>
+{% block extra_scripts %}
+<script src="{% static 'backtester/main.js' %}"></script>
 {% endblock %}

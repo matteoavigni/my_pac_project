@@ -4,36 +4,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PAC Backtester</title>
+    <title>{% block title %}PAC Simulator | Backtester ETF & Fiscalità Italiana{% endblock %}</title>
+    <meta name="description" content="Simulatore PAC (Piano di Accumulo Capitale) su ETF con dati storici reali, conversione valuta EUR, fiscalità italiana (26%, 12,5%, bollo 0,20%) e confronto PAC vs PIC.">
 
-    <!-- FAVICON: Carica il tuo file SVG dai file statici -->
     <link rel="icon" type="image/svg+xml" href="{% static 'backtester/favicon.svg' %}">
-
-    <!-- Carichiamo il CSS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'backtester/style.css' %}">
-    <!-- Chart.js per i grafici -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 </head>
 <body>
+    <script>
+        (function () {
+            var t = localStorage.getItem('pacTheme') || 'light';
+            if (t === 'dark') {
+                document.documentElement.classList.add('dark');
+                document.body.classList.add('dark-theme');
+            }
+        })();
+    </script>
+
     <nav class="navbar">
-        <div class="container">
+        <div class="container navbar-inner">
             <a href="{% url 'home' %}" class="logo">
-                <img src="{% static 'backtester/favicon.svg' %}" width="24" height="24" style="vertical-align: middle; margin-right: 8px;">
-                PAC Simulator
+                <img src="{% static 'backtester/favicon.svg' %}" width="26" height="26" alt="Logo PAC Simulator">
+                <span>PAC Simulator</span>
             </a>
+
+            <div class="nav-right">
+                <div class="nav-links">
+                    <a href="{% url 'home' %}">Home</a>
+                    <a href="{% url 'calcolatore' %}">Simulatore</a>
+                    <a href="{% url 'home' %}#metodologia">Metodologia</a>
+                </div>
+                <button type="button" id="theme-toggle" class="theme-btn" aria-label="Cambia tema">🌙</button>
+            </div>
         </div>
     </nav>
 
-    <main class="container fade-in">
+    <main class="container">
+        {% if messages %}
+        <div class="messages-stack no-print">
+            {% for message in messages %}
+            <div class="alert {% if 'error' in message.tags %}alert-error{% else %}alert-warning{% endif %}">
+                <span>{{ message }}</span>
+                <button type="button" class="alert-close" aria-label="Chiudi">&times;</button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 
     <footer class="footer">
-        <p>
-            Developed by <a href="https://matteoavigni.github.io/" target="_blank" style="color: inherit; text-decoration: underline; font-weight: 600;">Matteo Avigni</a>
-        </p>
+        <div class="container">
+            <p>
+                <strong>Disclaimer:</strong> Strumento informativo ed educativo basato su dati storici Yahoo Finance. I rendimenti passati non sono indicativi di quelli futuri e non costituiscono consulenza finanziaria.
+            </p>
+            <p>
+                Developed by <a href="https://matteoavigni.github.io/" target="_blank" rel="noopener" style="font-weight: 600;">Matteo Avigni</a>
+            </p>
+        </div>
     </footer>
+
+    <script src="{% static 'backtester/theme.js' %}"></script>
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>
